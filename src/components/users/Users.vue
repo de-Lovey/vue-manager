@@ -7,7 +7,7 @@
     <!--        <el-breadcrumb-item>用户列表</el-breadcrumb-item>-->
     <!--      </el-breadcrumb>-->
     <!--第三步, 调用-->
-    <Breadcrumb :firstmenu="'用户管理'" :secmenu="'用户列表'"></Breadcrumb>
+<!--    <Breadcrumb :firstmenu="'用户管理'" :secmenu="'用户列表'"></Breadcrumb>-->
 
     <!--2.卡片组件-->
     <el-card class="card_box">
@@ -29,7 +29,7 @@
       <!--4. 表格组件-->
       <el-table :data="userList" border>
         <!--索引列-->
-        <el-table-column type="index"></el-table-column>
+        <el-table-column type="index" label="#"></el-table-column>
         <el-table-column prop="username" label="姓名"></el-table-column>
         <el-table-column prop="email" label="邮箱"></el-table-column>
         <el-table-column prop="mobile" label="电话"></el-table-column>
@@ -41,10 +41,10 @@
         </el-table-column>
         <el-table-column label="操作">
           <template #default="{ row}">
-            <el-button type="primary" icon="el-icon-edit" size="mini"></el-button>
+            <el-button type="primary" icon="el-icon-edit" size="mini" @click="showEditDialog(row.id)"></el-button>
             <el-button @click="removeUserById(row.id)" type="danger" icon="el-icon-delete" size="mini"></el-button>
             <el-tooltip content="分配角色" placement="top" :enterable="false">
-              <el-button type="warning" icon="el-icon-setting" size="mini"></el-button>
+              <el-button type="warning" icon="el-icon-setting" size="mini" @click="showRoleDialog(row)"></el-button>
             </el-tooltip>
           </template>
 
@@ -94,12 +94,67 @@
       </span>
     </el-dialog>
 
+    <!--修改用户的对话框-->
+    <el-dialog
+      title="修改用户"
+      :visible.sync="editDialogVisible"
+      width="50%"
+      @close="editDialogClosed"
+    >
+      <!--表单结构-->
+      <el-form :model="editForm"  :rules="editFormRules" ref="editRef" label-width="70px" hide-required-asterisk>
+        <!--prop="username" : 验证规则的属性-->
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="editForm.username" disabled></el-input>
+        </el-form-item>
+        <el-form-item label="邮箱" prop="email">
+          <el-input v-model="editForm.email"></el-input>
+        </el-form-item>
+        <el-form-item label="手机" prop="mobile">
+          <el-input v-model="editForm.mobile"></el-input>
+        </el-form-item>
+      </el-form>
+
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="editDialogVisible = false">取 消</el-button>
+        <el-button type="primary" @click="editUserInfo">确 定</el-button>
+      </span>
+    </el-dialog>
+
+    <!--分配角色的对话框-->
+    <el-dialog
+      title="分配角色"
+      :visible.sync="setRoleDialogVisible"
+      width="50%"
+      @close="setRoleDialogClosed"
+    >
+      <!--内容结构-->
+     <div>
+       <p>当前的用户: {{userInfo.username}}</p>
+       <p>当前的角色: {{ userInfo.role_name }}</p>
+       <p>
+         分配新角色
+         <el-select v-model="roleId" placeholder="请选择">
+           <el-option
+             v-for="item in roleList"
+             :key="item.id"
+             :label="item.roleName"
+             :value="item.id">
+           </el-option>
+         </el-select>
+       </p>
+     </div>
+
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="setRoleDialogVisible = false">取 消</el-button>
+        <el-button type="primary" @click="setRoleInfo">确 定</el-button>
+      </span>
+    </el-dialog>
+
   </div>
 </template>
 
 <script>
-  // 1. 导入公共子组件
-  import Breadcrumb from '../subComponents/breadcrumb.vue'
 
   export default {
     name: 'Users',
@@ -126,6 +181,8 @@
       return {
         // 控制弹框的显示和隐藏
         dialogVisible: false,
+        // 控制修改弹框的显示和隐藏
+        editDialogVisible: false,
         queryInfo: {
           query: '', // 查询字符串
           pagenum: 1, // 默认显示第一页
@@ -156,14 +213,34 @@
             { required: true, message: '请输入手机号', trigger: 'blur' },
             { validator: checkPhone, trigger: 'blur' }
           ]
-        }
+        },
+        // 修改表单的数据对象
+        editForm : {},
+        // 修改表单的验证规则
+        editFormRules:{
+          email:[
+            { required: true, message: '请输入邮箱', trigger: 'blur' },
+            // 调用自定义的校验规则
+            { validator: checkEmail, trigger: 'blur' }
+          ],
+          mobile:[
+            { required: true, message: '请输入手机号', trigger: 'blur' },
+            { validator: checkPhone, trigger: 'blur' }
+          ]
+        },
+        // 角色的id
+        roleId: '',
+        setRoleDialogVisible: false,
+        roleList:[],
+        // 保存对应的用户信息
+        userInfo: {}
 
       }
     },
-    components: {
-      // 2. 注册到父组件上
-      Breadcrumb
-    },
+    // components: {
+    //   // 2. 注册到父组件上
+    //   Breadcrumb
+    // },
     created() {
       this.getUserList()
     },
@@ -221,6 +298,10 @@
       addDialogClosed() {
         this.$refs.addRef.resetFields()
       },
+      // 监听修改对话框关闭的事件
+      editDialogClosed() {
+        this.$refs.editRef.resetFields()
+      },
       // 点击删除单个用户
       async removeUserById(id) {
         // 消息确认框的组件
@@ -236,11 +317,77 @@
         // 如果点击的是取消按钮, confirmRes : cancel
         if (confirmRes === 'confirm') {
           const { data: res } = await this.$http.delete(`users/${id}`)
-          if (res.meta.status !== 200) return this.$message.error('删除失败')
+          console.log(res)
+          if (res.meta.status !== 200) return this.$message.error(res.meta.msg)
           // 成功 , 刷新数据
           this.getUserList()
         }
+      },
+      // 点击显示修改的对话框
+      async showEditDialog(id) {
+        // 根据id查询用户信息
+        const { data :res } = await this.$http.get(`users/${id}`)
+        if (res.meta.status !== 200) return this.$message.error('查询失败')
+        // 成功
+        this.editForm = res.data
+        // 显示弹框
+        this.editDialogVisible = true
+      },
+      // 点击修改
+      editUserInfo() {
+        this.$refs.editRef.validate(async valid => {
+          if (!valid) return
+          // 发请求
+          const { data: res } = await this.$http.put(`users/${this.editForm.id}`, {
+            email: this.editForm.email,
+            mobile: this.editForm.mobile
+          })
+
+          if (res.meta.status !== 200) return this.$message.error(res.meta.msg)
+          // 成功
+          // 重新获取用户列表数据
+          this.getUserList()
+          // 关闭对话框
+          this.editDialogVisible = false
+          this.$message.success('更新成功')
+        })
+      },
+      // 监听分配角色对话框的关闭事件
+      setRoleDialogClosed() {
+        // 重置data中的参数
+        this.userInfo = {}
+        this.roleId = ''
+      },
+      // 点击分配角色
+      async setRoleInfo() {
+        // 判断
+        if (!this.roleId) return this.$message.info('请选择角色')
+        // 请求接口
+        const { data: res } = await this.$http.put(`users/${this.userInfo.id}/role`, {
+          rid: this.roleId
+        })
+        if (res.meta.status !== 200) return this.$message.error('分配角色失败')
+        // 成功
+        this.$message.success('更新角色成功')
+        // 初始化数据
+        this.getUserList()
+        // 关闭弹框
+        this.setRoleDialogVisible = false
+      },
+      // 点击显示分配角色的对话框
+      async showRoleDialog(userInfo) {
+        // 保存对应的用户信息
+        this.userInfo = userInfo
+        // 获取角色列表
+
+        const { data: res } = await this.$http.get('roles')
+        if (res.meta.status !== 200) return this.$message.error('获取失败')
+        // 成功
+        this.roleList = res.data
+
+        this.setRoleDialogVisible = true
       }
+
     }
   }
 </script>
