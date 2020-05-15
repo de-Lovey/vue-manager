@@ -393,11 +393,4 @@
 </script>
 
 <style scoped lang="less">
-  .card_box {
-    margin-top: 20px;
-
-    .el-table {
-      margin: 20px 0;
-    }
-  }
 </style>
